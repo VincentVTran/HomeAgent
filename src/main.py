@@ -5,13 +5,13 @@ from werkzeug.utils import secure_filename
 
 # LangChain Dependencies
 from langchain_ollama.chat_models import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
 
 # Python Dependency
 import os
 import time
 
+# Local Dependency
+from tool_registry import ToolRegistry
 # File upload configuration
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg'}
@@ -19,24 +19,23 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg'}
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Tool functions
-class Multiply(BaseModel):
-    a: int = Field(..., description="First integer")
-    b: int = Field(..., description="Second integer")
+
 
 # Setup Flask App
 app = Flask(__name__)
 CORS(app)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-tools_list = [Multiply]
+tool_registry = ToolRegistry()
 
+print(tool_registry.get_tools())
 # Initialize Ollama model
 model = ChatOllama(
     model="llama3.2", 
     base_url="http://192.168.2.17:11434",
-    verbose=True
-)
+    verbose=True,
+    temperature=0
+).bind_tools(list(tool_registry.get_tools().values()))
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -69,8 +68,15 @@ def chat():
 
         # Get response from model
         response = model.invoke(messages)
-        print(response)
-        
+
+        # Process tool calls
+        for tool_call in response.tool_calls:
+            print(tool_call)
+            selected_tool = tool_registry.get_tools()[tool_call["name"]]
+            tool_message =  selected_tool.invoke(tool_call)
+            messages.append(tool_message)
+
+        response = model.invoke(messages)
         return jsonify({
             'response': str(response.content),
             'files_processed': len(uploaded_files)

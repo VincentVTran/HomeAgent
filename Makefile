@@ -9,6 +9,11 @@ ifneq (,$(wildcard $(ENV_FILE)))
     export $(shell sed 's/=.*//' $(ENV_FILE))
 endif
 
+# Run application locally
+run-flask:
+	python3 ./src/main.py
+
 # Deploy application
-deploy:
+deploy-ollama:
+	kubectl delete ns home-agent
 	envsubst < $(OLLAMA_DEPLOYMENT_FILE) | kubectl apply -f -
